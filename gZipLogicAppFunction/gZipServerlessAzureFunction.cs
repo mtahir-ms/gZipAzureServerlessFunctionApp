@@ -34,6 +34,8 @@ namespace gZipServerlessAzureFunction
 {
     public static class gZipServerlessAzureFunction
     {
+        private static string isBase64Str = "true";
+
         [FunctionName("gZipServerlessAzureFunction")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
@@ -49,6 +51,7 @@ namespace gZipServerlessAzureFunction
             req.Headers.TryGetValue("Content-Encoding", out var contentEncodingValue); //if coming in Header
 
             string gzipAction = req.Query["gzipAction"]; //GET Query String for gzip compress or decompress
+             isBase64Str = req.Query["isBase64Str"];
 
             //This only applies to Decompress
             var incominggZipContent = "";
@@ -83,7 +86,17 @@ namespace gZipServerlessAzureFunction
             return new OkObjectResult(responseMessage);
         }
 
+        //Just expecting the consumer to pass isBase64Str in query string parameter. 
+        //You can implement your own code to detect base64 for incoming request.Body. 
+        private static bool isBase64Valid()
+        {
+            bool isValidResult = false;
 
+            if (isBase64Str.ToUpper() == "TRUE")
+                isValidResult = true;
+
+            return isValidResult;
+        }
         /// <summary>
         /// Decompresses Gzip stream and returns string content.
         /// </summary>
@@ -94,11 +107,15 @@ namespace gZipServerlessAzureFunction
             //Stream stream;
             try
             {
-                Console.WriteLine("Compressed data base64 string : {0}", contentData);
+                byte[] base64ToBytesConvertData;
+                Console.WriteLine("Compressed data Input string : " + contentData + " and isBase64Str : " + isBase64Str);
+                if (isBase64Valid())
+                {base64ToBytesConvertData = Convert.FromBase64String(contentData); }
+                else
+                { base64ToBytesConvertData = ASCIIEncoding.UTF8.GetBytes(contentData); }
 
-                byte[] base64ToBytesConvertData = Convert.FromBase64String(contentData);
                 byte[] decompressedBytesData = gZipDecompressAndReturnArray(base64ToBytesConvertData);
-                string decompressedStringData = System.Text.ASCIIEncoding.ASCII.GetString(decompressedBytesData);
+                string decompressedStringData = ASCIIEncoding.ASCII.GetString(decompressedBytesData);
                 responseData = decompressedStringData;
                 Console.WriteLine("Compressed bytes data size: {0}", base64ToBytesConvertData.Length);
                 Console.WriteLine("Decompressed bytes data size: {0}", decompressedBytesData.Length);
@@ -130,11 +147,11 @@ namespace gZipServerlessAzureFunction
             try
             {
                 Console.WriteLine("original data  : {0}", contentData);
-                byte[] base64ToBytesConvertData = Encoding.ASCII.GetBytes(contentData);
-                byte[] compressedBytesData = gZipCompressAndReturnArray(base64ToBytesConvertData);
+                byte[] TextBytesConvertData = Encoding.ASCII.GetBytes(contentData);
+                byte[] compressedBytesData = gZipCompressAndReturnArray(TextBytesConvertData);
                 string CompressedStringData = System.Text.ASCIIEncoding.ASCII.GetString(compressedBytesData);
                 responseData = Convert.ToBase64String(compressedBytesData);
-                Console.WriteLine("Dompressed bytes data size: {0}", base64ToBytesConvertData.Length);
+                Console.WriteLine("Dompressed bytes data size: {0}", TextBytesConvertData.Length);
                 Console.WriteLine("Compressed bytes data size: {0}", compressedBytesData.Length);
                 Console.WriteLine("Compressed Value:       {0}", responseData);
 
