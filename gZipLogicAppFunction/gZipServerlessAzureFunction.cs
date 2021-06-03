@@ -42,31 +42,51 @@ namespace gZipServerlessAzureFunction
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
-        
-        string requestBody = await new StreamReader(req.Body).ReadToEndAsync(); //Request Body is a file stream object. Must convert to proper string value
-            string GZipEncoding = "gzip";
-           // string DeflateEncoding = "deflate"; //Not implemented yet. Can be easily added later. 
-
+            string responseMessage = "";
+            HttpRequest  copyRequest = req;
 
             req.Headers.TryGetValue("Content-Encoding", out var contentEncodingValue); //if coming in Header
+            //try
+            //{
+            //    //When gZip file will arrive, simply decompress and return the results. 
+            //    //    if (req.Body.GetType() == typeof(Microsoft.AspNetCore.WebUtilities.FileBufferingReadStream))
+            //    var gZipFile = new MemoryStream();
+            //    req.Body.CopyTo(gZipFile);
+            //    responseMessage = DecompressGZipFile(gZipFile.ToArray());
+            //    return new OkObjectResult(responseMessage);
+
+            //}
+            //catch (Exception ex) { Console.WriteLine(ex.Message); }
+            //finally
+            //{
+            //    Console.WriteLine("Moving to string compress/decompress processing section");
+            //}
+
+            var requestBody = await new StreamReader(copyRequest.Body).ReadToEndAsync(); //Request Body is a file stream object. Must convert to proper string value
+            string GZipEncoding = "gzip";
+           // string DeflateEncoding = "deflate"; //Not implemented yet. Can be easily added later. 
 
             string gzipAction = req.Query["gzipAction"]; //GET Query String for gzip compress or decompress
              isBase64Str = req.Query["isBase64Str"];
 
             //This only applies to Decompress
             var incominggZipContent = "";
-            string responseMessage = "";
-
-
+            
+            
             if (contentEncodingValue.Equals(GZipEncoding))
             {
                 if (gzipAction.Contains("decompress"))
                 {
-
-                    //Extract Request Body as JSON , incoming HTTP request must be JSON. Expected must to have fields are content, content-encoding
+                    //Extract Request Body as JSON , incoming HTTP request must be JSON with base64 in content field. Expected must to have fields are content, content-encoding
                     var incomingJSONBody = JObject.Parse(requestBody);
                     if (string.IsNullOrEmpty(contentEncodingValue)) { contentEncodingValue = incomingJSONBody["content-encoding"].ToString(); } //if coming in body JSON
-                    incominggZipContent = incomingJSONBody["content"].ToString(); //extract the incoming content value
+
+                    //some senders were sending as content field or just $content field. 
+                    if (incomingJSONBody["content"]!=null)
+                        incominggZipContent = incomingJSONBody["content"].ToString(); //extract the incoming content value
+                    else if (incomingJSONBody["$content"] != null)
+                        incominggZipContent = incomingJSONBody["$content"].ToString(); //extract the incoming content value
+
                     responseMessage = DecompressGZipString(incominggZipContent);
                 }
                 else if (gzipAction.Contains("compress"))
@@ -91,6 +111,8 @@ namespace gZipServerlessAzureFunction
         private static bool isBase64Valid()
         {
             bool isValidResult = false;
+            if (isBase64Str == null)
+                isBase64Str = "false";
 
             if (isBase64Str.ToUpper() == "TRUE")
                 isValidResult = true;
@@ -114,6 +136,7 @@ namespace gZipServerlessAzureFunction
                 else
                 { base64ToBytesConvertData = ASCIIEncoding.UTF8.GetBytes(contentData); }
 
+                //base64ToBytesConvertData = System.IO.File.ReadAllBytes(@"C:\Users\motahir\Downloads\wpc_109E7F_2041_20210601_B2EE0000E260AD60_1.json.gz");
                 byte[] decompressedBytesData = gZipDecompressAndReturnArray(base64ToBytesConvertData);
                 string decompressedStringData = ASCIIEncoding.ASCII.GetString(decompressedBytesData);
                 responseData = decompressedStringData;
@@ -134,6 +157,36 @@ namespace gZipServerlessAzureFunction
 
 
             return responseData; 
+        }
+
+        private static string DecompressGZipFile(Byte[] gZipFileData)
+        {
+            string responseData = "";
+
+            //Stream stream;
+            try
+            {
+
+                //base64ToBytesConvertData = System.IO.File.ReadAllBytes(@"C:\Users\motahir\Downloads\wpc_109E7F_2041_20210601_B2EE0000E260AD60_1.json.gz");
+                byte[] decompressedBytesData = gZipDecompressAndReturnArray(gZipFileData);
+                string decompressedStringData = ASCIIEncoding.ASCII.GetString(decompressedBytesData);
+                responseData = decompressedStringData;
+                Console.WriteLine("Decompressed bytes data size: {0}", decompressedBytesData.Length);
+                Console.WriteLine("Decompressed Value:       {0}", decompressedStringData);
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error: " + ex.StackTrace);
+                throw ex;
+            }
+            finally
+            {
+                Console.WriteLine("Decompressed operation completed successfully.");
+            }
+
+
+            return responseData;
         }
 
         /// <summary>
